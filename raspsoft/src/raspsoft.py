@@ -11,11 +11,11 @@ GPIO.setup(12, GPIO.OUT)
 pwm_cc = GPIO.PWM(32, 100)
 pwm_servo = GPIO.PWM(12, 50)
 
-"""
+def angle_to_percent (angle) :
+    """
     Compute PWM percent of a given angle.
     Used to rotate the servo.
-"""
-def angle_to_percent (angle) :
+    """
     if angle > 180 or angle < 0 :
         return False
 
@@ -27,12 +27,11 @@ def angle_to_percent (angle) :
 
     return start + angle_as_percent
 
-"""
+class Car():
+    """
     Implements car which is the context of the state design pattern used.
     Contains a list of states. If the list contains a state, it means that the state is currently running.
-"""
-class Car():
-
+    """
     def __init__(self):
         self.states = []
 
@@ -43,11 +42,11 @@ class Car():
     def remove_state(self, state):
         state.stop()
         self.states.remove(state)
-"""
-    Abstract class that implements state which can be started or stopped.
-"""
-class State():
 
+class State():
+    """
+    Abstract class that implements state which can be started or stopped.
+    """
     def __init__(self):
         pass
 
@@ -59,19 +58,27 @@ class State():
 
 class Forward(State):
 
-    def __init__(self,speed):
+    def __init__(self,target_speed,acceleration):
         self.pwm_freq = 100
-        self.speed = speed
+        self.target_speed = target_speed
+        self.init_speed = 60
+        self.acceleration = acceleration / 10
 
     def run(self):
         self.thread = threads.thread_with_trace(target = self.thread_start)
         self.thread.start()
 
     def thread_start(self):
-        pwm_cc.ChangeFrequency(self.pwm_freq)
-        GPIO.output(13,1)
-        GPIO.output(15,0)
-        pwm_cc.start(self.speed)
+        if((0 <= self.acceleration <= 1) and (60 <= self.target_speed <= 85)):
+            pwm_cc.ChangeFrequency(self.pwm_freq)
+            GPIO.output(13,1)
+            GPIO.output(15,0)
+            while(self.target_speed >= self.init_speed):
+                pwm_cc.start(self.init_speed)
+                time.sleep(self.acceleration)
+                self.init_speed += 1
+        else:
+            raise("Acceleration must be between 0 and 1 include")
 
     def stop(self):
         pwm_cc.stop()
@@ -82,19 +89,27 @@ class Forward(State):
 
 class Backward(State):
 
-    def __init__(self,speed):
+    def __init__(self,speed,acceleration):
         self.pwm_freq = 100
-        self.speed = speed
+        self.target_speed = speed
+        self.init_speed = 60
+        self.acceleration = acceleration / 10
 
     def run(self):
         self.thread = threads.thread_with_trace(target = self.thread_start)
         self.thread.start()
     
     def thread_start(self):
-        pwm_cc.ChangeFrequency(self.pwm_freq)
-        GPIO.output(13,0)
-        GPIO.output(15,1)
-        pwm_cc.start(self.speed)
+        if((0 <= self.acceleration <= 1) and (60 <= self.target_speed <= 85)):
+            pwm_cc.ChangeFrequency(self.pwm_freq)
+            GPIO.output(13,0)
+            GPIO.output(15,1)
+            while(self.target_speed >= self.init_speed):
+                pwm_cc.start(self.init_speed)
+                time.sleep(self.acceleration)
+                self.init_speed += 1
+        else:
+            raise("Acceleration must be between 0 and 1 include")
 
     def stop(self):
         pwm_cc.stop()
@@ -117,7 +132,7 @@ class TurnRight(State):
         return_angle = 90
         while(return_angle > self.target_angle):
             pwm_servo.start(angle_to_percent(return_angle))
-            time.sleep(0.02)
+            time.sleep(0.01)
             return_angle -= 1
 
     def stop(self):
@@ -140,7 +155,7 @@ class TurnLeft(State):
         return_angle = 90
         while(return_angle < self.target_angle):
             pwm_servo.start(angle_to_percent(return_angle))
-            time.sleep(0.02)
+            time.sleep(0.01)
             return_angle += 1
 
     def stop(self):
@@ -150,14 +165,16 @@ class TurnLeft(State):
     
 if __name__ == "__main__":
     car = Car()
-    backward = Backward(60)
-    forward = Forward(60)
+    backward = Backward(60,1)
+    forward = Forward(70,1)
     turnRight = TurnRight(30)
-    turnLeft = TurnLeft(150)
+    turnLeft = TurnLeft(140)
     car.add_state(forward)
     time.sleep(2)
     car.add_state(turnRight)
-    time.sleep(0.5)
-    car.remove_state(forward)
     time.sleep(1)
     car.remove_state(turnRight)
+    car.add_state(turnLeft)
+    time.sleep(1)
+    car.remove_state(turnLeft)
+    car.remove_state(forward)
